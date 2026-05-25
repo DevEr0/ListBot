@@ -18,11 +18,11 @@ Modes:
 import time
 import argparse
 
-from config import CHECK_INTERVAL_SECONDS, assert_configured
+from config import CHECK_INTERVAL_SECONDS, LISTAM_URL, assert_configured
 from fetcher import fetch_page
 from listings import parse_listings
 from storage import load_seen, save_seen, mark_seen
-from notifier import send_listing, send_heartbeat
+from notifier import send_listing, send_heartbeat, send_startup
 
 # How often to send the "still alive" Telegram message.
 HEARTBEAT_EVERY = 5
@@ -87,6 +87,7 @@ def main() -> None:
     args = ap.parse_args()
 
     assert_configured()
+    send_startup(LISTAM_URL)
 
     if args.seed:
         run_once(seed=True)

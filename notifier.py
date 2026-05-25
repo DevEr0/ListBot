@@ -23,6 +23,17 @@ def send_listing(listing: dict) -> bool:
     return _send_text(caption)
 
 
+def send_startup(url: str) -> bool:
+    """Send a notification when the bot starts up."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    text = (
+        f"🚀 <b>Bot started</b>\n"
+        f"Started at {now}.\n"
+        f"Watching: <code>{_esc(url)}</code>"
+    )
+    return _send_text(text)
+
+
 def send_heartbeat(cycle: int) -> bool:
     """Send a short status message so you know the bot is alive."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
