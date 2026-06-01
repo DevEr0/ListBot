@@ -1,5 +1,10 @@
 """
-Fetcher using visible Playwright browser to bypass Cloudflare.
+Fetcher using a headless Playwright browser.
+
+headless=True is required for any server environment (Railway, VPS, Docker,
+GitHub Actions, etc.) — there is no display on those machines, so headless=False
+crashes immediately and fetch_page() returns None every single cycle, which is
+why the heartbeat kept firing but no listings were ever found.
 """
 import time
 import random
@@ -8,17 +13,20 @@ from config import LISTAM_URL
 
 
 def fetch_page(url: str = LISTAM_URL) -> str | None:
-    """Return HTML using a visible browser."""
+    """Return HTML using a headless browser."""
 
     time.sleep(random.uniform(2, 5))
 
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(
-                headless=False,
+                headless=True,          # ← was False; False crashes on any server
                 args=[
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",   # prevents OOM crashes in Docker
+                    "--disable-gpu",
                 ]
             )
             context = browser.new_context(

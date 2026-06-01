@@ -33,7 +33,9 @@ _cycle_count = 0
 def run_once(seed: bool = False) -> None:
     html = fetch_page()
     if not html:
-        print("[main] no HTML this cycle, skipping")
+        print("[main] ERROR: fetch_page() returned None — browser crashed or page unreachable. "
+              "If running on a server, confirm headless=True in fetcher.py and that "
+              "'playwright install-deps chromium' has been run.")
         return
 
     found = parse_listings(html)
