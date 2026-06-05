@@ -25,7 +25,13 @@ CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "900"))  # 15 m
 REQUEST_TIMEOUT = 20
 
 # --- Storage ---
-SEEN_FILE = "seen.json"
+# On Railway the container filesystem is ephemeral — seen.json is wiped on every
+# redeploy.  To persist it across deploys:
+#   1. Create a Volume in your Railway project (dashboard → + New → Volume).
+#   2. Mount it to e.g. /data.
+#   3. Set SEEN_FILE=/data/seen.json in Railway → Variables.
+# Without a volume, the bot auto-seeds on every restart (no notification flood).
+SEEN_FILE = os.getenv("SEEN_FILE", "seen.json")
 
 # --- HTTP ---
 # Pretend to be a normal browser. Don't change the language unless you also

@@ -23,6 +23,11 @@ def send_listing(listing: dict) -> bool:
     return _send_text(caption)
 
 
+def send_message(text: str) -> bool:
+    """Send an arbitrary HTML-formatted message. Used for bot status updates."""
+    return _send_text(text)
+
+
 def send_startup(url: str) -> bool:
     """Send a notification when the bot starts up."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
