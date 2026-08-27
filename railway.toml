@@ -1,10 +1,5 @@
 [build]
-# pip install alone is not enough for Playwright — the browser binary and its
-# system dependencies must also be installed explicitly during the build phase.
-# Without this file, Railway never runs `playwright install`, so fetch_page()
-# always throws "Executable doesn't exist", returns None, and the bot only
-# ever sends the heartbeat ping.
-buildCommand = "pip install -r requirements.txt && playwright install chromium --with-deps"
+buildCommand = "pip install -r requirements.txt && python -m playwright install chromium --with-deps"
 
 [deploy]
 startCommand = "python main.py"
