@@ -1,5 +1,5 @@
 [build]
-buildCommand = "pip install -r requirements.txt && python -m playwright install chromium --with-deps"
+buildCommand = "pip install --no-cache-dir -r requirements.txt && python -m playwright install chromium --with-deps"
 
 [deploy]
 startCommand = "python main.py"

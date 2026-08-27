@@ -1,100 +1,160 @@
 """
-Notification layer (Telegram).
-Tries to send the listing as a photo with caption (nicer UI).
-Falls back to plain text if the image URL is missing or refused.
-Also exposes send_heartbeat() for periodic "still alive" pings.
+Telegram notification layer.
+
+Important:
+- Logs Telegram's JSON error description instead of only HTTP status.
+- Treats 403 as a Telegram/chat configuration problem.
+- Falls back from photo to text when a photo is rejected.
 """
-import requests
 from datetime import datetime, timezone
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from html import escape
+
+import requests
+
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, REQUEST_TIMEOUT
 
 API_BASE = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+
+
+def _request(method: str, payload: dict) -> tuple[bool, dict]:
+    try:
+        response = requests.post(
+            f"{API_BASE}/{method}",
+            json=payload,
+            timeout=REQUEST_TIMEOUT,
+        )
+
+        try:
+            data = response.json()
+        except ValueError:
+            data = {
+                "ok": False,
+                "description": response.text[:500],
+            }
+
+        if response.ok and data.get("ok") is True:
+            return True, data
+
+        print(
+            f"[notifier] Telegram {method} failed: "
+            f"HTTP {response.status_code}; "
+            f"error_code={data.get('error_code')}; "
+            f"description={data.get('description')}"
+        )
+        return False, data
+
+    except requests.RequestException as e:
+        print(f"[notifier] Telegram {method} request failed: {type(e).__name__}: {e}")
+        return False, {}
+
+
+def check_telegram() -> bool:
+    """Check token and target chat before trying to send listings."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("[notifier] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing.")
+        return False
+
+    ok, data = _request("getMe", {})
+    if not ok:
+        print(
+            "[notifier] Bot token is invalid/revoked, or Telegram API rejected it."
+        )
+        return False
+
+    bot = data.get("result", {})
+    print(f"[notifier] authenticated as @{bot.get('username', 'unknown')}")
+
+    ok, data = _request(
+        "getChat",
+        {"chat_id": TELEGRAM_CHAT_ID},
+    )
+
+    if not ok:
+        print(
+            "[notifier] Cannot access TELEGRAM_CHAT_ID. "
+            "Check the chat ID and make sure the bot is allowed to access the chat."
+        )
+        return False
+
+    chat = data.get("result", {})
+    print(
+        f"[notifier] target chat OK: "
+        f"id={chat.get('id')} type={chat.get('type')}"
+    )
+    return True
 
 
 def send_listing(listing: dict) -> bool:
     caption = _format(listing)
 
-    if listing.get("image_url"):
-        ok = _send_photo(listing["image_url"], caption)
+    image_url = listing.get("image_url")
+    if image_url:
+        ok = _send_photo(image_url, caption)
         if ok:
             return True
-        # Fall through to text if Telegram rejected the photo URL.
 
     return _send_text(caption)
 
 
 def send_message(text: str) -> bool:
-    """Send an arbitrary HTML-formatted message. Used for bot status updates."""
     return _send_text(text)
 
 
 def send_startup(url: str) -> bool:
-    """Send a notification when the bot starts up."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    text = (
+    return _send_text(
         f"🚀 <b>Bot started</b>\n"
         f"Started at {now}.\n"
         f"Watching: <code>{_esc(url)}</code>"
     )
-    return _send_text(text)
 
 
 def send_heartbeat(cycle: int) -> bool:
-    """Send a short status message so you know the bot is alive."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    text = (
+    return _send_text(
         f"✅ <b>Bot heartbeat</b>\n"
         f"Cycle #{cycle} completed at {now}.\n"
         f"Still watching list.am for new listings."
     )
-    return _send_text(text)
 
 
 def _send_photo(image_url: str, caption: str) -> bool:
-    try:
-        r = requests.post(
-            f"{API_BASE}/sendPhoto",
-            json={
-                "chat_id": TELEGRAM_CHAT_ID,
-                "photo": image_url,
-                "caption": caption,
-                "parse_mode": "HTML",
-            },
-            timeout=15,
-        )
-        r.raise_for_status()
-        return True
-    except requests.RequestException as e:
-        print(f"[notifier] sendPhoto failed: {e}")
-        return False
+    ok, _ = _request(
+        "sendPhoto",
+        {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "photo": image_url,
+            "caption": caption,
+            "parse_mode": "HTML",
+        },
+    )
+    return ok
 
 
 def _send_text(text: str) -> bool:
-    try:
-        r = requests.post(
-            f"{API_BASE}/sendMessage",
-            json={
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": False,
-            },
-            timeout=15,
-        )
-        r.raise_for_status()
-        return True
-    except requests.RequestException as e:
-        print(f"[notifier] sendMessage failed: {e}")
-        return False
+    ok, _ = _request(
+        "sendMessage",
+        {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": False,
+        },
+    )
+    return ok
 
 
 def _format(listing: dict) -> str:
+    title = _esc(listing.get("title", "Listing"))
+    price = _esc(listing.get("price", "Price not shown"))
+    url = escape(listing.get("url", ""), quote=True)
+
     return (
-        f"🏠 <b>{_esc(listing['title'])}</b>\n"
-        f"💰 {_esc(listing['price'])}\n\n"
-        f'<a href="{listing["url"]}">View on list.am →</a>'
+        f"🏠 <b>{title}</b>\n"
+        f"💰 {price}\n\n"
+        f'<a href="{url}">View on list.am →</a>'
     )
 
 
 def _esc(text: str) -> str:
-    return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return escape(str(text or ""))
